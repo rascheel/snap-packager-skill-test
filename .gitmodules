@@ -1,0 +1,18 @@
+[submodule "darkhttpd"]
+	path = darkhttpd
+	url = https://github.com/emikulic/darkhttpd.git
+[submodule "dufs"]
+	path = dufs
+	url = https://github.com/sigoden/dufs.git
+[submodule "helix"]
+	path = helix
+	url = https://github.com/helix-editor/helix.git
+[submodule "htop"]
+	path = htop
+	url = https://github.com/htop-dev/htop
+[submodule "ollama"]
+	path = ollama
+	url = https://github.com/ollama/ollama
+[submodule "simple-server"]
+	path = simple-server
+	url = git@github.com:rascheel/simple-server.git
