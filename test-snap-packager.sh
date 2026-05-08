@@ -1,9 +1,27 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-AGENT_PROMPT="/snap-packager target an x86 runtime"
+AGENT_PROMPT="/snap-packager"
 
-ENGINE=$1
+# Usage: ./test-snap-packager.sh [--engine copilot|ollama] [app ...]
+#   --engine  AI engine to use (optional; omit for cleanup-only mode)
+#   app ...   One or more app directory names to process (optional; omit for all)
+
+ENGINE=""
+FILTER_APPS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --engine)
+            ENGINE="$2"
+            shift 2
+            ;;
+        *)
+            FILTER_APPS+=("$1")
+            shift
+            ;;
+    esac
+done
 
 if [[ -z "$ENGINE" ]]; then
     echo "ℹ️  No AI engine specified. Running in 'Cleanup Only' mode."
@@ -14,10 +32,25 @@ else
     echo "🚀 Starting batch processing using: $ENGINE"
 fi
 
+if [[ ${#FILTER_APPS[@]} -gt 0 ]]; then
+    echo "🔍 Limiting to apps: ${FILTER_APPS[*]}"
+fi
+
 echo "---"
 
 for dir in */; do
     dir_name=${dir%/}
+
+    # If specific apps were requested, skip anything not in the list
+    if [[ ${#FILTER_APPS[@]} -gt 0 ]]; then
+        match=0
+        for app in "${FILTER_APPS[@]}"; do
+            [[ "$app" == "$dir_name" ]] && match=1 && break
+        done
+        if [[ $match -eq 0 ]]; then
+            continue
+        fi
+    fi
 
     echo "📂 Processing: $dir_name"
 
@@ -26,14 +59,17 @@ for dir in */; do
         continue
     fi
 
-    # 1. THE NUCLEAR GIT RESET (Always runs)
-    if [ -d ".git" ]; then
-        echo "  🧹 Cleaning repository (nuclear)..."
-        git reset --hard HEAD &>/dev/null
-        git clean -fdx &>/dev/null
-    else
-        echo "  ⚠️  No .git found, skipping reset..."
+    # Skip directories that are not application repositories
+    if [ ! -d ".git" ]; then
+        echo "  ⏩ No .git found, not an application directory. Skipping."
+        cd ..
+        continue
     fi
+
+    # 1. THE NUCLEAR GIT RESET (Always runs)
+    echo "  🧹 Cleaning repository (nuclear)..."
+    git reset --hard HEAD &>/dev/null
+    git clean -fdx &>/dev/null
 
     # 2. CONDITIONAL AI ENGINE STEP
     if [[ "$ENGINE" == "copilot" ]]; then
