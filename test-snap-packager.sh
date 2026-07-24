@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-AGENT_PROMPT="/snap-packager"
+AGENT_PROMPT="/snap-orchestrator"
 
 # Usage: ./test-snap-packager.sh [--engine copilot|ollama] [app ...]
 #   --engine  AI engine to use (optional; omit for cleanup-only mode)
