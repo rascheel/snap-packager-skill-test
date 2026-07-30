@@ -71,6 +71,13 @@ for dir in */; do
     git reset --hard HEAD &>/dev/null
     git clean -fdx &>/dev/null
 
+    # Remove previous analysis file to avoid NOP runs asking if the analysis
+    # should be kept or regenerated
+    analysis_file="/tmp/snap-analysis-$dir_name.json"
+    if [ -e "$analysis_file" ] ; then
+	rm "$analysis_file"
+    fi
+
     # 2. CONDITIONAL AI ENGINE STEP
     if [[ "$ENGINE" == "copilot" ]]; then
         echo "  🤖 Spawning Copilot..."
