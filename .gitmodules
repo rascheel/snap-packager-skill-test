@@ -15,4 +15,4 @@
 	url = https://github.com/ollama/ollama
 [submodule "simple-server"]
 	path = simple-server
-	url = git@github.com:rascheel/simple-server.git
+	url = https://github.com/rascheel/simple-server.git
