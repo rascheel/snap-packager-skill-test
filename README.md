@@ -2,6 +2,8 @@
 
 This repo contains a test harness for evaluating the `snap-packager` Copilot skill. It uses real open-source projects as subjects, runs the skill against each one to produce a snap, and then validates the resulting snap with a dedicated test suite.
 
+Supported AI engines: Copilot, Ollama, and Claude Code (Sonnet).
+
 ## Repository layout
 
 ```
@@ -33,18 +35,19 @@ git submodule update --init --recursive
 
 ## `test-snap-packager.sh`
 
-Iterates over every app subdirectory (or a specified subset), resets it to a clean state, and optionally invokes a Copilot or Ollama agent to run the `/snap-packager` skill inside each app's directory.
+Iterates over every app subdirectory (or a specified subset), resets it to a clean state, and optionally invokes a Copilot, Ollama, or Claude Code agent to run the `/snap-packager` skill inside each app's directory.
 
 **Usage:**
 
 ```bash
-./test-snap-packager.sh [--engine copilot|ollama] [app ...]
+./test-snap-packager.sh [--engine copilot|ollama|claude] [app ...]
 ```
 
 | Argument | Description |
 |---|---|
 | `--engine copilot` | Use the GitHub Copilot CLI agent |
 | `--engine ollama` | Use a local Ollama agent (qwen3-coder-next model) |
+| `--engine claude` | Use the Claude Code CLI agent (Sonnet model) |
 | *(no `--engine`)* | Cleanup-only mode — resets repos without invoking any AI |
 | `app ...` | One or more app names to process; omit to process all |
 
@@ -59,6 +62,9 @@ Iterates over every app subdirectory (or a specified subset), resets it to a cle
 
 # Run only on darkhttpd and htop using Ollama
 ./test-snap-packager.sh --engine ollama darkhttpd htop
+
+# Run the snap-packager skill via Claude Code (Sonnet) on all apps
+./test-snap-packager.sh --engine claude
 ```
 
 For each app the script:
