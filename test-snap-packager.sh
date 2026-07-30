@@ -60,7 +60,7 @@ for dir in */; do
     fi
 
     # Skip directories that are not application repositories
-    if [ ! -d ".git" ]; then
+    if [ ! -e ".git" ]; then
         echo "  ⏩ No .git found, not an application directory. Skipping."
         cd ..
         continue
