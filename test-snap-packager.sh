@@ -99,17 +99,39 @@ for dir in */; do
         continue
     fi
 
-    # Skip directories that are not application repositories
-    if [ ! -e ".git" ]; then
-        echo "  ⏩ No .git found, not an application directory. Skipping."
+    app_prompt="$AGENT_PROMPT"
+    if [ -e ".git" ]; then
+        # Source fixtures are submodules, so reset them before every agent run.
+        echo "  🧹 Cleaning repository (nuclear)..."
+        git reset --hard HEAD &>/dev/null
+        git clean -fdx &>/dev/null
+    elif [ -f "image-ref.txt" ]; then
+        # OCI fixtures are tracked metadata, not nested Git repositories. Remove
+        # only the reproducibly generated package inputs and outputs.
+        echo "  🧹 Cleaning generated OCI packaging artifacts..."
+        rm -rf config.json rootfs rootfs_* build_scripts patch_scripts snap \
+            parts stage prime .snapcraft .rootfs-reextract
+        rm -f -- *.snap *.tar snapcraft.yaml snapcraft.yaml.bak \
+            SNAP_PACKAGING.md snap-analysis.json snap-validation-results.json
+
+        image_ref=$(<image-ref.txt)
+        if [[ -z "$image_ref" ]]; then
+            echo "  ❌ OCI fixture image-ref.txt is empty"
+            cd ..
+            continue
+        fi
+        app_prompt+="
+
+OCI FIXTURE INPUT:
+Package this exact Docker/OCI image, not the current directory as a source project:
+$image_ref
+
+Build for amd64 and retain strict confinement."
+    else
+        echo "  ⏩ No .git or image-ref.txt found, not an application fixture. Skipping."
         cd ..
         continue
     fi
-
-    # 1. THE NUCLEAR GIT RESET (Always runs)
-    echo "  🧹 Cleaning repository (nuclear)..."
-    git reset --hard HEAD &>/dev/null
-    git clean -fdx &>/dev/null
 
     # Remove previous analysis file to avoid NOP runs asking if the analysis
     # should be kept or regenerated
@@ -121,13 +143,13 @@ for dir in */; do
     # 2. CONDITIONAL AI ENGINE STEP
     if [[ "$ENGINE" == "copilot" ]]; then
         echo "  🤖 Spawning Copilot..."
-        copilot -p "$AGENT_PROMPT" --allow-all
+        copilot -p "$app_prompt" --allow-all
     elif [[ "$ENGINE" == "ollama" ]]; then
         echo "  🤖 Spawning Ollama (Claude)..."
-        ollama launch claude --model qwen3-coder-next --yes -- -p "$AGENT_PROMPT" --dangerously-skip-permissions --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
+        ollama launch claude --model qwen3-coder-next --yes -- -p "$app_prompt" --dangerously-skip-permissions --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
     elif [[ "$ENGINE" == "claude" ]]; then
         echo "  🤖 Spawning Claude (Sonnet)..."
-        claude -p "$AGENT_PROMPT" --model sonnet --dangerously-skip-permissions --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
+        claude -p "$app_prompt" --model sonnet --dangerously-skip-permissions --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
     else
         echo "  ⏩ Skipping AI step."
     fi

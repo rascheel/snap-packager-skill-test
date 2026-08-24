@@ -8,7 +8,7 @@ Supported AI engines: Copilot, Ollama, and Claude Code (Sonnet).
 
 ```
 .
-├── test-snap-packager.sh   # Drive the snap-packager skill across all (or selected) apps
+├── test-snap-packager.sh   # Drive the snap-orchestrator skill across all (or selected) apps
 ├── run-snap-tests.sh       # Run the snap test suite against built snaps
 ├── tests/                  # Per-app test scripts and shared helpers (tests/lib.sh)
 ├── darkhttpd/              # submodule — https://github.com/emikulic/darkhttpd
@@ -16,6 +16,7 @@ Supported AI engines: Copilot, Ollama, and Claude Code (Sonnet).
 ├── helix/                  # submodule — https://github.com/helix-editor/helix
 ├── htop/                   # submodule — https://github.com/htop-dev/htop
 ├── ollama/                 # submodule — https://github.com/ollama/ollama
+├── redis/                  # OCI fixture — pinned redis image manifest
 └── simple-server/          # submodule — https://github.com/rascheel/simple-server
 ```
 
@@ -35,7 +36,7 @@ git submodule update --init --recursive
 
 ## `test-snap-packager.sh`
 
-Iterates over every app subdirectory (or a specified subset), resets it to a clean state, and optionally invokes a Copilot, Ollama, or Claude Code agent to run the `/snap-packager` skill inside each app's directory.
+Iterates over every app subdirectory (or a specified subset), resets generated state, and optionally invokes a Copilot, Ollama, or Claude Code agent to run the `/snap-orchestrator` skill inside each fixture directory.
 
 **Usage:**
 
@@ -57,19 +58,31 @@ Iterates over every app subdirectory (or a specified subset), resets it to a cle
 # Reset all app repos to a clean state (no AI)
 ./test-snap-packager.sh
 
-# Run the snap-packager skill via Copilot on all apps
+# Run the snap-orchestrator skill via Copilot on all apps
 ./test-snap-packager.sh --engine copilot
 
-# Run only on darkhttpd and htop using Ollama
-./test-snap-packager.sh --engine ollama darkhttpd htop
+# Package only the pinned Redis OCI fixture using Ollama
+./test-snap-packager.sh --engine ollama redis
 
-# Run the snap-packager skill via Claude Code (Sonnet) on all apps
+# Run the snap-orchestrator skill via Claude Code (Sonnet) on all apps
 ./test-snap-packager.sh --engine claude
 ```
 
 For each app the script:
-1. Performs a hard `git reset` and `git clean` to remove any previously generated files.
-2. (If an engine is specified) Spawns the AI agent with the `/snap-packager` prompt, which produces a `snap/snapcraft.yaml` and supporting files inside the app directory.
+1. Performs a hard `git reset` and `git clean` for source submodules. OCI fixtures retain their tracked metadata and remove only generated extraction and packaging artifacts.
+2. (If an engine is specified) spawns the AI agent with `/snap-orchestrator`. An OCI fixture provides a pinned image reference to the agent rather than being treated as a source-code project.
+
+### OCI fixtures
+
+`redis/image-ref.txt` identifies the exact image used by the Redis fixture:
+
+```text
+docker://docker.io/library/redis@sha256:76961cd2a0f40ef6fdd334b6b1b3a76a2bad1848d89f3030ca30a7521d4a9493
+```
+
+The image archive, extracted root filesystem, generated Snapcraft project, and
+snap artifact are intentionally ignored. The digest is the supplied
+`linux/amd64` manifest, so OCI builds must use `--build-for amd64`.
 
 ## `run-snap-tests.sh`
 
@@ -94,8 +107,8 @@ Validates the snaps that were built by the packager step. For each app it locate
 # Test all apps
 ./run-snap-tests.sh
 
-# Test only dufs and simple-server
-./run-snap-tests.sh dufs simple-server
+# Test only the Redis snap (requires redis-cli)
+./run-snap-tests.sh redis
 ```
 
 Test scripts live in `tests/<app>.sh`. Each script defines a `run_tests()` function that uses the shared helpers in `tests/lib.sh` (HTTP assertions, service state checks, port-readiness waits, etc.). Results are summarised at the end:
@@ -112,13 +125,16 @@ The script exits with code `1` if any test fails.
 ## Typical workflow
 
 ```bash
-# 1. Run the packager skill to generate snaps
+# 1. Run the orchestrator skill to generate snaps
 ./test-snap-packager.sh --engine copilot
 
-# 2. Build each snap (snapcraft must be available in each app dir)
+# 2. Build source snaps (snapcraft must be available in each app dir)
 for d in darkhttpd dufs helix htop ollama simple-server; do
     (cd "$d" && snapcraft)
 done
+
+# Build the OCI fixture for its pinned architecture
+(cd redis && snapcraft --use-lxd --build-for amd64)
 
 # 3. Validate the built snaps
 ./run-snap-tests.sh
