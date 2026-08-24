@@ -1,0 +1,19 @@
+# Generated artifacts for the pinned Redis OCI fixture.
+/redis/config.json
+/redis/rootfs/
+/redis/rootfs_*/
+/redis/build_scripts/
+/redis/patch_scripts/
+/redis/snap/
+/redis/parts/
+/redis/stage/
+/redis/prime/
+/redis/.snapcraft/
+/redis/.rootfs-reextract/
+/redis/*.snap
+/redis/*.tar
+/redis/snapcraft.yaml
+/redis/snapcraft.yaml.bak
+/redis/SNAP_PACKAGING.md
+/redis/snap-analysis.json
+/redis/snap-validation-results.json
