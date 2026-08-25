@@ -32,6 +32,7 @@ declare -A APP_DIRS=(
     [helix]="$SCRIPT_DIR/helix"
     [htop]="$SCRIPT_DIR/htop"
     [ollama]="$SCRIPT_DIR/ollama"
+    [postgresql]="$SCRIPT_DIR/postgresql"
     [redis]="$SCRIPT_DIR/redis"
     [simple-server]="$SCRIPT_DIR/simple-server"
 )
