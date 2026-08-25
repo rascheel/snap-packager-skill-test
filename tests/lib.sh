@@ -21,7 +21,9 @@ header() { echo -e "\n${BOLD}[ $1 ]${NC}"; }
 # Find the first .snap file in a directory.
 find_snap_file() {
     local dir="$1"
-    find "$dir" -maxdepth 1 -name "*.snap" 2>/dev/null | sort | head -1
+    # Depth is 2 as for OCI applications the "project folder" is sometimes
+    # nested inside the main one (e.g. `redis/redis-snap`)
+    find "$dir" -maxdepth 2 -name "*.snap" 2>/dev/null | sort | head -1
 }
 
 # Parse the snap name from a .snap filename: <name>_<version>_<arch>.snap
