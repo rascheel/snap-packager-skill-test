@@ -69,8 +69,9 @@ Iterates over every app subdirectory (or a specified subset), resets generated s
 ```
 
 For each app the script:
-1. Performs a hard `git reset` and `git clean` for source submodules. OCI fixtures retain their tracked metadata and remove only generated extraction and packaging artifacts.
-2. (If an engine is specified) spawns the AI agent with `/snap-builder`. An OCI fixture provides a pinned image reference to the agent rather than being treated as a source-code project.
+1. Performs a hard `git reset` and `git clean` for source submodules. OCI fixtures keep their tracked `README.md` and `image-ref.txt` and remove every generated file the top-level `.gitignore` covers (`git clean -X`).
+2. (If an engine is specified) spawns the AI agent with `/snap-builder`. An OCI fixture provides a pinned image reference to the agent rather than being treated as a source-code project. The `claude` and `ollama` engines run with `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` and `BASH_MAX_TIMEOUT_MS=3600000`, and with `ScheduleWakeup`/`CronCreate` disallowed, so long builds aren't cut off when the agent waits on background work.
+3. (If an engine is specified) checks the run's outputs: a zero engine exit status, a `snapcraft.yaml`, a `.snap`, and `snap-validation-results.json` (not required for classic snaps, which the validator skips). Missing outputs mark the app `❌ pipeline incomplete`; results with `clean` not `true` are flagged `⚠️`. The script exits `1` if any app is incomplete.
 
 ### OCI fixtures
 

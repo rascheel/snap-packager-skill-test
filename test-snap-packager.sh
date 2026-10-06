@@ -29,6 +29,14 @@ rationale in your output, and continue. Specifically:
   than asking whether to reuse them.
 - If a step is genuinely blocked, exhaust the skill's documented fallbacks, then
   record the blocker in the final report and carry on with the remaining phases.
+- Long-running work: never end your turn while a build, a sub-agent, or any other
+  background task is still running. In this mode, ending your turn can end the run
+  and kill that work. Run builds such as `snapcraft pack` in the foreground with a
+  generous timeout (single commands may run for up to 60 minutes). If you do start
+  something in the background, stay in the same turn and keep checking on it until it
+  has finished and you have its result. When you delegate a phase to a sub-agent, wait
+  for its final result before ending your turn. Do not use ScheduleWakeup or cron
+  tools.
 
 This directive applies to every sub-agent as well. When you delegate a phase, include
 these non-interactive instructions verbatim in the sub-agent's prompt so it does not
@@ -42,6 +50,17 @@ EOF
 AGENT_PROMPT="$SKILL_PROMPT
 
 $NONINTERACTIVE_DIRECTIVE"
+
+# Claude Code settings for unattended `-p` runs (claude and ollama engines).
+#   CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0  keep waiting for background tasks
+#     (sub-agents, monitors) instead of terminating the run after 600 seconds.
+#   BASH_MAX_TIMEOUT_MS  let a single foreground command run for up to 60 minutes,
+#     so long builds (e.g. helix's Rust compile) don't need to be backgrounded.
+CLAUDE_ENV=(CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 BASH_MAX_TIMEOUT_MS=3600000)
+
+# Scheduling tools only make sense in interactive sessions; in a `-p` run they
+# lead the agent to end its turn and wait for a wakeup that never comes.
+DISALLOWED_TOOLS="ScheduleWakeup,CronCreate"
 
 # Usage: ./test-snap-packager.sh [--engine copilot|ollama|claude] [app ...]
 #   --engine  AI engine to use (optional; omit for cleanup-only mode)
@@ -78,6 +97,49 @@ fi
 
 echo "---"
 
+FAILED_APPS=()
+UNCLEAN_APPS=()
+
+# Check that an agent run left the expected pipeline outputs in the current
+# directory. OCI projects may be nested one level down (e.g. postgresql/postgresql-snap).
+# Usage: check_pipeline_result <app> <engine exit status>
+check_pipeline_result() {
+    local app="$1"
+    local rc="$2"
+    local problems=()
+
+    [[ "$rc" -eq 0 ]] || problems+=("engine exited with status $rc")
+
+    local manifest snap_file results
+    if [[ -f snap/snapcraft.yaml ]]; then
+        manifest="snap/snapcraft.yaml"
+    else
+        manifest=$(find . -maxdepth 3 -name snapcraft.yaml -not -path "*/rootfs/*" 2>/dev/null | sort | head -1)
+    fi
+    snap_file=$(find . -maxdepth 2 -name "*.snap" 2>/dev/null | sort | head -1)
+    results=$(find . -maxdepth 2 -name snap-validation-results.json 2>/dev/null | sort | head -1)
+
+    [[ -n "$manifest" ]] || problems+=("no snapcraft.yaml")
+    [[ -n "$snap_file" ]] || problems+=("no .snap built")
+
+    # snap-validator hard-stops for classic snaps, so no results file is expected.
+    if [[ -n "$manifest" ]] && grep -qE '^confinement:[[:space:]]*classic' "$manifest"; then
+        echo "  ℹ️  Classic confinement: validation is skipped by design."
+    elif [[ -z "$results" ]]; then
+        problems+=("no snap-validation-results.json")
+    elif ! python3 -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("clean") is True else 1)' "$results" 2>/dev/null; then
+        echo "  ⚠️  Validation results are not clean: $results"
+        UNCLEAN_APPS+=("$app")
+    fi
+
+    if [[ ${#problems[@]} -gt 0 ]]; then
+        local IFS=";"
+        echo "  ❌ Pipeline incomplete:${problems[*]/#/ }"
+        FAILED_APPS+=("$app")
+        return 1
+    fi
+}
+
 for dir in */; do
     dir_name=${dir%/}
 
@@ -107,12 +169,11 @@ for dir in */; do
         git clean -fdx &>/dev/null
     elif [ -f "image-ref.txt" ]; then
         # OCI fixtures are tracked metadata, not nested Git repositories. Remove
-        # only the reproducibly generated package inputs and outputs.
+        # everything the top-level .gitignore marks as generated (extraction,
+        # nested project folders such as postgresql-snap/, OCI layouts, builds),
+        # keeping only the tracked README.md and image-ref.txt.
         echo "  🧹 Cleaning generated OCI packaging artifacts..."
-        rm -rf config.json rootfs rootfs_* build_scripts patch_scripts snap \
-            parts stage prime .snapcraft .rootfs-reextract
-        rm -f -- *.snap *.tar snapcraft.yaml snapcraft.yaml.bak \
-            SNAP_PACKAGING.md snap-analysis.json snap-validation-results.json
+        git clean -fdXq -- .
 
         image_ref=$(<image-ref.txt)
         if [[ -z "$image_ref" ]]; then
@@ -141,23 +202,40 @@ Build for amd64 and retain strict confinement."
     fi
 
     # 2. CONDITIONAL AI ENGINE STEP
+    engine_rc=0
     if [[ "$ENGINE" == "copilot" ]]; then
         echo "  🤖 Spawning Copilot..."
         copilot -p "$app_prompt" --allow-all
+        engine_rc=$?
     elif [[ "$ENGINE" == "ollama" ]]; then
         echo "  🤖 Spawning Ollama (Claude)..."
-        ollama launch claude --model qwen3-coder-next --yes -- -p "$app_prompt" --dangerously-skip-permissions --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
+        env "${CLAUDE_ENV[@]}" ollama launch claude --model qwen3-coder-next --yes -- -p "$app_prompt" --dangerously-skip-permissions --disallowedTools "$DISALLOWED_TOOLS" --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
+        engine_rc=$?
     elif [[ "$ENGINE" == "claude" ]]; then
         echo "  🤖 Spawning Claude (Sonnet)..."
-        claude -p "$app_prompt" --model sonnet --dangerously-skip-permissions --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
+        env "${CLAUDE_ENV[@]}" claude -p "$app_prompt" --model sonnet --dangerously-skip-permissions --disallowedTools "$DISALLOWED_TOOLS" --append-system-prompt "$NONINTERACTIVE_DIRECTIVE"
+        engine_rc=$?
     else
         echo "  ⏩ Skipping AI step."
     fi
 
+    status="✅ Finished"
+    if [[ -n "$ENGINE" ]] && ! check_pipeline_result "$dir_name" "$engine_rc"; then
+        status="❌ Finished (pipeline incomplete)"
+    fi
+
     cd ..
-    echo "✅ Finished $dir_name"
+    echo "$status $dir_name"
     echo ""
 done
 
 echo "---"
 echo "✨ All directories processed."
+
+if [[ ${#UNCLEAN_APPS[@]} -gt 0 ]]; then
+    echo "⚠️  Validation not clean: ${UNCLEAN_APPS[*]}"
+fi
+if [[ ${#FAILED_APPS[@]} -gt 0 ]]; then
+    echo "❌ Pipeline incomplete: ${FAILED_APPS[*]}"
+    exit 1
+fi
