@@ -11,7 +11,7 @@ Docker Hub layer URL. It is deliberately pinned instead of using the mutable
 `latest` tag.
 
 `test-snap-packager.sh` recognizes `image-ref.txt` as an OCI fixture and passes
-the reference to `/snap-orchestrator`. The generated OCI extraction, Snapcraft
+the reference to `/snap-builder`. The generated OCI extraction, Snapcraft
 project, and `.snap` artifact are ignored; only this reproducible fixture
 metadata is tracked.
 

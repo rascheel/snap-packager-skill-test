@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-SKILL_PROMPT="/snap-orchestrator"
+SKILL_PROMPT="/snap-builder"
 
 # Appended to the prompt of every engine. These are unattended batch runs, so the
 # agent must never stop to ask the user a question -- several skills in the pipeline

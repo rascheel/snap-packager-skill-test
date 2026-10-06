@@ -14,7 +14,7 @@
 # test regardless of pass/fail.
 #
 # Environment variables in each test script can be used to override defaults
-# (ports, service names, etc.) if the snap-packager produces non-standard values.
+# (ports, service names, etc.) if snapcraft-author produces non-standard values.
 
 set -euo pipefail
 
