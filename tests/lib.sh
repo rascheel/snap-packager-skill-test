@@ -66,12 +66,24 @@ remove_snap() {
     sudo snap remove "$snap_name" 2>&1 | sed 's/^/    /' || true
 }
 
-# Wait until a TCP port is accepting connections (or timeout).
+# Return success if something is listening on a TCP port.
+# Checks the socket table instead of connecting, so the probe never consumes a
+# connection (single-shot servers such as `ncat --listen` exit after one).
+port_is_listening() {
+    local port="$1"
+    if command -v ss &>/dev/null; then
+        [[ -n "$(ss -ltnH "sport = :$port" 2>/dev/null)" ]]
+    else
+        bash -c "echo >/dev/tcp/127.0.0.1/$port" 2>/dev/null
+    fi
+}
+
+# Wait until a TCP port is listening (or timeout).
 wait_for_port() {
     local port="$1"
     local timeout="${2:-15}"
     local elapsed=0
-    while ! bash -c "echo >/dev/tcp/127.0.0.1/$port" 2>/dev/null; do
+    while ! port_is_listening "$port"; do
         sleep 0.5
         elapsed=$(echo "$elapsed + 0.5" | bc)
         if (( $(echo "$elapsed >= $timeout" | bc -l) )); then
